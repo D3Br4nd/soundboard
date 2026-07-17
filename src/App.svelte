@@ -1,5 +1,7 @@
 <script>
   import { onMount } from 'svelte';
+  import { flip } from 'svelte/animate';
+  import { dndzone } from 'svelte-dnd-action';
   import { Plus, X, ChevronDown, ChevronRight, FolderPlus, Pencil, Trash2 } from '@lucide/svelte';
   import { useRegisterSW } from 'virtual:pwa-register/svelte';
   import SoundButton from './lib/SoundButton.svelte';
@@ -53,6 +55,51 @@
     return map;
   });
 
+  // Modalita' riordino (stile iOS): tenendo premuto un suono, tutti i pulsanti iniziano a
+  // "tremare" e diventano trascinabili tra le cartelle; si esce toccando altrove.
+  const FLIP_DURATION_MS = 200;
+  let editMode = $state(false);
+  /** @type {Record<string, Array<any>>} lista suoni per zona (id cartella, o 'unfiled') usata da dndzone durante il drag */
+  let zoneItems = $state({});
+
+  $effect(() => {
+    /** @type {Record<string, Array<any>>} */
+    const map = { unfiled: sounds.filter((s) => !s.folderId) };
+    for (const folder of folders) map[folder.id] = sounds.filter((s) => s.folderId === folder.id);
+    zoneItems = map;
+  });
+
+  function enterEditMode() {
+    editMode = true;
+  }
+
+  function handleDndConsider(zoneKey, e) {
+    zoneItems = { ...zoneItems, [zoneKey]: e.detail.items };
+  }
+
+  async function handleDndFinalize(zoneKey, e) {
+    zoneItems = { ...zoneItems, [zoneKey]: e.detail.items };
+    const targetFolderId = zoneKey === 'unfiled' ? null : zoneKey;
+    for (const item of e.detail.items) {
+      if ((item.folderId ?? null) !== targetFolderId) {
+        await moveSoundToFolder(item.id, targetFolderId);
+      }
+    }
+  }
+
+  async function moveSoundToFolder(id, targetFolderId) {
+    const existing = sounds.find((s) => s.id === id);
+    if (!existing) return;
+    const updated = await updateSound(id, {
+      name: existing.name,
+      icon: existing.icon,
+      color: existing.color,
+      folderId: targetFolderId,
+      file: null,
+    });
+    sounds = sounds.map((s) => (s.id === id ? updated : s));
+  }
+
   /** @type {any} */
   let deferredInstallPrompt = $state(null);
   let installed = $state(false);
@@ -98,6 +145,18 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') refreshSounds();
     });
+    // Uscita dalla modalita' riordino: un tocco che non parte da un pulsante suono
+    // (sfondo, cartelle, nav...) la disattiva. I tap sui pulsanti in tale modalita'
+    // fermano la propagazione (servono per trascinare, non per uscire).
+    window.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (!editMode) return;
+        if (e.target instanceof Element && e.target.closest('[data-sound-button]')) return;
+        editMode = false;
+      },
+      true,
+    );
 
     await refreshSounds();
   });
@@ -206,8 +265,21 @@
 </script>
 
 <div class="min-h-screen bg-slate-950 pb-24 text-slate-100">
-  <header class="sticky top-0 z-20 border-b border-slate-800/80 bg-slate-950/90 px-4 py-3 backdrop-blur">
+  <header
+    class="sticky top-0 z-20 flex items-center justify-between border-b border-slate-800/80
+      bg-slate-950/90 px-4 py-3 backdrop-blur"
+  >
     <h1 class="text-lg font-bold tracking-tight sm:text-xl">🎛️ Soundboard</h1>
+    {#if view === 'home'}
+      <button
+        type="button"
+        aria-label="Nuova cartella"
+        class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+        onclick={openNewFolderModal}
+      >
+        <FolderPlus size={20} />
+      </button>
+    {/if}
   </header>
 
   {#if view === 'home'}
@@ -220,32 +292,66 @@
         </p>
       {:else}
         <div class="flex flex-col gap-6">
-          <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
-            {#each unfiledSounds as sound (sound.id)}
-              <SoundButton
-                name={sound.name}
-                icon={sound.icon}
-                color={sound.color}
-                onplay={() => handlePlay(sound)}
-              />
-            {/each}
+          {#if editMode}
+            <div class="relative">
+              <div
+                data-drop-zone="unfiled"
+                class="grid min-h-24 grid-cols-3 gap-3 rounded-2xl sm:grid-cols-4 sm:gap-4 md:grid-cols-5"
+                use:dndzone={{ items: zoneItems.unfiled ?? [], flipDurationMs: FLIP_DURATION_MS }}
+                onconsider={(e) => handleDndConsider('unfiled', e)}
+                onfinalize={(e) => handleDndFinalize('unfiled', e)}
+              >
+                {#each zoneItems.unfiled ?? [] as sound (sound.id)}
+                  <div animate:flip={{ duration: FLIP_DURATION_MS }}>
+                    <SoundButton
+                      name={sound.name}
+                      icon={sound.icon}
+                      color={sound.color}
+                      editMode
+                      onplay={() => handlePlay(sound)}
+                      onlongpress={enterEditMode}
+                    />
+                  </div>
+                {/each}
+              </div>
+              {#if (zoneItems.unfiled ?? []).length === 0}
+                <p
+                  class="pointer-events-none absolute inset-0 flex items-center justify-center
+                    text-center text-xs text-slate-600"
+                >
+                  Trascina qui per togliere dalla cartella
+                </p>
+              {/if}
+            </div>
+          {:else}
+            <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
+              {#each unfiledSounds as sound (sound.id)}
+                <SoundButton
+                  name={sound.name}
+                  icon={sound.icon}
+                  color={sound.color}
+                  onplay={() => handlePlay(sound)}
+                  onlongpress={enterEditMode}
+                />
+              {/each}
 
-            <button
-              type="button"
-              aria-label="Aggiungi suono"
-              class="flex aspect-square w-full flex-col items-center justify-center gap-1.5 rounded-2xl
-                border-2 border-dashed border-slate-700 text-slate-500 transition-colors
-                hover:border-slate-500 hover:text-slate-300 active:scale-95"
-              onclick={() => openAddModal(null)}
-            >
-              <Plus size={28} />
-              <span class="text-xs font-medium sm:text-sm">Aggiungi</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                aria-label="Aggiungi suono"
+                class="flex aspect-square w-full flex-col items-center justify-center gap-1.5 rounded-2xl
+                  border-2 border-dashed border-slate-700 text-slate-500 transition-colors
+                  hover:border-slate-500 hover:text-slate-300 active:scale-95"
+                onclick={() => openAddModal(null)}
+              >
+                <Plus size={28} />
+                <span class="text-xs font-medium sm:text-sm">Aggiungi</span>
+              </button>
+            </div>
+          {/if}
 
           {#each folders as folder (folder.id)}
-            {@const folderSounds = soundsByFolder.get(folder.id) ?? []}
-            {@const isCollapsed = collapsedFolders.has(folder.id)}
+            {@const folderSounds = editMode ? (zoneItems[folder.id] ?? []) : (soundsByFolder.get(folder.id) ?? [])}
+            {@const isCollapsed = !editMode && collapsedFolders.has(folder.id)}
             <div class="flex flex-col gap-3 rounded-2xl bg-slate-900/60 p-3 ring-1 ring-slate-800">
               <div class="flex items-center gap-2">
                 <button
@@ -262,60 +368,86 @@
                   <span class="truncate">{folder.name}</span>
                   <span class="text-xs font-normal text-slate-500">({folderSounds.length})</span>
                 </button>
-                <button
-                  type="button"
-                  aria-label="Rinomina cartella {folder.name}"
-                  class="rounded-lg p-1.5 text-slate-500 hover:bg-sky-500/10 hover:text-sky-400"
-                  onclick={() => openEditFolderModal(folder)}
-                >
-                  <Pencil size={15} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Elimina cartella {folder.name}"
-                  class="rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
-                  onclick={() => handleDeleteFolder(folder.id)}
-                >
-                  <Trash2 size={15} />
-                </button>
+                {#if !editMode}
+                  <button
+                    type="button"
+                    aria-label="Rinomina cartella {folder.name}"
+                    class="rounded-lg p-1.5 text-slate-500 hover:bg-sky-500/10 hover:text-sky-400"
+                    onclick={() => openEditFolderModal(folder)}
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Elimina cartella {folder.name}"
+                    class="rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
+                    onclick={() => handleDeleteFolder(folder.id)}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                {/if}
               </div>
 
               {#if !isCollapsed}
-                <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
-                  {#each folderSounds as sound (sound.id)}
-                    <SoundButton
-                      name={sound.name}
-                      icon={sound.icon}
-                      color={sound.color}
-                      onplay={() => handlePlay(sound)}
-                    />
-                  {/each}
+                {#if editMode}
+                  <div class="relative">
+                    <div
+                      data-drop-zone={folder.id}
+                      class="grid min-h-24 grid-cols-3 gap-3 rounded-xl sm:grid-cols-4 sm:gap-4 md:grid-cols-5"
+                      use:dndzone={{ items: zoneItems[folder.id] ?? [], flipDurationMs: FLIP_DURATION_MS }}
+                      onconsider={(e) => handleDndConsider(folder.id, e)}
+                      onfinalize={(e) => handleDndFinalize(folder.id, e)}
+                    >
+                      {#each zoneItems[folder.id] ?? [] as sound (sound.id)}
+                        <div animate:flip={{ duration: FLIP_DURATION_MS }}>
+                          <SoundButton
+                            name={sound.name}
+                            icon={sound.icon}
+                            color={sound.color}
+                            editMode
+                            onplay={() => handlePlay(sound)}
+                            onlongpress={enterEditMode}
+                          />
+                        </div>
+                      {/each}
+                    </div>
+                    {#if (zoneItems[folder.id] ?? []).length === 0}
+                      <p
+                        class="pointer-events-none absolute inset-0 flex items-center justify-center
+                          text-center text-xs text-slate-600"
+                      >
+                        Trascina qui un suono
+                      </p>
+                    {/if}
+                  </div>
+                {:else}
+                  <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
+                    {#each folderSounds as sound (sound.id)}
+                      <SoundButton
+                        name={sound.name}
+                        icon={sound.icon}
+                        color={sound.color}
+                        onplay={() => handlePlay(sound)}
+                        onlongpress={enterEditMode}
+                      />
+                    {/each}
 
-                  <button
-                    type="button"
-                    aria-label="Aggiungi suono in {folder.name}"
-                    class="flex aspect-square w-full flex-col items-center justify-center gap-1.5 rounded-2xl
-                      border-2 border-dashed border-slate-700 text-slate-500 transition-colors
-                      hover:border-slate-500 hover:text-slate-300 active:scale-95"
-                    onclick={() => openAddModal(folder.id)}
-                  >
-                    <Plus size={28} />
-                    <span class="text-xs font-medium sm:text-sm">Aggiungi</span>
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      aria-label="Aggiungi suono in {folder.name}"
+                      class="flex aspect-square w-full flex-col items-center justify-center gap-1.5 rounded-2xl
+                        border-2 border-dashed border-slate-700 text-slate-500 transition-colors
+                        hover:border-slate-500 hover:text-slate-300 active:scale-95"
+                      onclick={() => openAddModal(folder.id)}
+                    >
+                      <Plus size={28} />
+                      <span class="text-xs font-medium sm:text-sm">Aggiungi</span>
+                    </button>
+                  </div>
+                {/if}
               {/if}
             </div>
           {/each}
-
-          <button
-            type="button"
-            class="flex items-center justify-center gap-2 self-start rounded-xl border border-dashed
-              border-slate-700 px-4 py-2 text-sm font-medium text-slate-400 hover:border-slate-500 hover:text-slate-200"
-            onclick={openNewFolderModal}
-          >
-            <FolderPlus size={16} />
-            Nuova cartella
-          </button>
         </div>
       {/if}
     </main>

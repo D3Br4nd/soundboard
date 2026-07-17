@@ -3,6 +3,7 @@
   import { Dialog } from 'bits-ui';
   import { X, Upload, SmilePlus } from '@lucide/svelte';
   import { BUTTON_COLORS, DEFAULT_ICON } from './sounds.js';
+  import { LUCIDE_ICONS, isLucideIcon, toLucideIcon, getLucideComponent } from './icons.js';
 
   /**
    * @typedef {Object} EditingSound
@@ -32,6 +33,8 @@
   let file = $state(null);
   let error = $state('');
   let pickerOpen = $state(false);
+  /** @type {'emoji' | 'lucide'} */
+  let iconTab = $state('emoji');
   /** @type {any} */
   let pickerEl = $state();
 
@@ -44,11 +47,13 @@
       icon = editing.icon;
       color = editing.color;
       folderId = editing.folderId ?? '';
+      iconTab = isLucideIcon(editing.icon) ? 'lucide' : 'emoji';
     } else {
       name = '';
       icon = DEFAULT_ICON;
       color = BUTTON_COLORS[0];
       folderId = defaultFolderId ?? '';
+      iconTab = 'emoji';
     }
     file = null;
     error = '';
@@ -71,6 +76,7 @@
     icon = DEFAULT_ICON;
     color = BUTTON_COLORS[0];
     folderId = '';
+    iconTab = 'emoji';
     file = null;
     error = '';
     pickerOpen = false;
@@ -172,25 +178,61 @@
 
         <div class="flex flex-col gap-1.5">
           <span class="text-sm font-medium text-slate-300">Icona</span>
-          <button
-            type="button"
-            class="flex items-center gap-2 self-start rounded-xl border border-slate-700 bg-slate-800
-              px-3 py-2 text-sm text-slate-200 hover:border-slate-500"
-            onclick={() => (pickerOpen = !pickerOpen)}
-          >
-            <span class="text-xl leading-none">{icon}</span>
-            <SmilePlus size={16} class="text-slate-400" />
-            <span>{pickerOpen ? 'Chiudi' : 'Scegli emoji'}</span>
-          </button>
 
-          {#if pickerOpen}
-            <div class="overflow-hidden rounded-xl border border-slate-700">
-              <emoji-picker
-                bind:this={pickerEl}
-                class="dark"
-                data-source="/emoji-data.json"
-                style="width: 100%; height: 320px;"
-              ></emoji-picker>
+          <div class="flex gap-1 self-start rounded-xl bg-slate-800 p-1">
+            <button
+              type="button"
+              class="rounded-lg px-3 py-1 text-sm font-medium transition-colors
+                {iconTab === 'emoji' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200'}"
+              onclick={() => (iconTab = 'emoji')}
+            >
+              Emoji
+            </button>
+            <button
+              type="button"
+              class="rounded-lg px-3 py-1 text-sm font-medium transition-colors
+                {iconTab === 'lucide' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200'}"
+              onclick={() => (iconTab = 'lucide')}
+            >
+              Icone
+            </button>
+          </div>
+
+          {#if iconTab === 'emoji'}
+            <button
+              type="button"
+              class="flex items-center gap-2 self-start rounded-xl border border-slate-700 bg-slate-800
+                px-3 py-2 text-sm text-slate-200 hover:border-slate-500"
+              onclick={() => (pickerOpen = !pickerOpen)}
+            >
+              <span class="text-xl leading-none">{isLucideIcon(icon) ? DEFAULT_ICON : icon}</span>
+              <SmilePlus size={16} class="text-slate-400" />
+              <span>{pickerOpen ? 'Chiudi' : 'Scegli emoji'}</span>
+            </button>
+
+            {#if pickerOpen}
+              <div class="overflow-hidden rounded-xl border border-slate-700">
+                <emoji-picker
+                  bind:this={pickerEl}
+                  class="dark"
+                  data-source="/emoji-data.json"
+                  style="width: 100%; height: 320px;"
+                ></emoji-picker>
+              </div>
+            {/if}
+          {:else}
+            <div class="grid grid-cols-7 gap-2 rounded-xl border border-slate-700 p-2 sm:grid-cols-8">
+              {#each Object.entries(LUCIDE_ICONS) as [iconName, Icon] (iconName)}
+                <button
+                  type="button"
+                  aria-label={iconName}
+                  class="flex aspect-square items-center justify-center rounded-lg
+                    {icon === toLucideIcon(iconName) ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}"
+                  onclick={() => (icon = toLucideIcon(iconName))}
+                >
+                  <Icon size={18} />
+                </button>
+              {/each}
             </div>
           {/if}
         </div>
@@ -227,7 +269,12 @@
         <div class="flex items-center gap-3 rounded-xl bg-slate-800/60 p-3">
           <span class="text-xs text-slate-400">Anteprima</span>
           <div class="{color} flex h-12 w-12 items-center justify-center rounded-xl text-xl text-white">
-            {icon}
+            {#if isLucideIcon(icon)}
+              {@const Icon = getLucideComponent(icon)}
+              <Icon size={22} />
+            {:else}
+              {icon}
+            {/if}
           </div>
           <span class="truncate text-sm text-slate-200">{name || 'Nome suono'}</span>
         </div>

@@ -1,5 +1,6 @@
 <script>
   import { Volume2, VolumeX, Trash2, Pencil, Download, CheckCircle2 } from '@lucide/svelte';
+  import { isLucideIcon, getLucideComponent } from './icons.js';
 
   /**
    * @typedef {Object} Props
@@ -108,8 +109,13 @@
       <ul class="flex flex-col divide-y divide-slate-800">
         {#each sounds as sound (sound.id)}
           <li class="flex items-center gap-3 py-2">
-            <div class="{sound.color} flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base">
-              {sound.icon}
+            <div class="{sound.color} flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base text-white">
+              {#if isLucideIcon(sound.icon)}
+                {@const Icon = getLucideComponent(sound.icon)}
+                <Icon size={18} />
+              {:else}
+                {sound.icon}
+              {/if}
             </div>
             <div class="flex-1 truncate text-sm text-slate-200">{sound.name}</div>
             <span class="text-xs text-slate-500">{formatSize(sound.size ?? 0)}</span>

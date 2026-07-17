@@ -25,3 +25,22 @@ button {
   background-color: rgba(148, 163, 184, 0.4);
   border-radius: 9999px;
 }
+
+/* Modalita' riordino cartelle (stile iOS): i pulsanti "tremano" per segnalare che sono trascinabili. */
+@keyframes jiggle {
+  0%,
+  100% {
+    transform: rotate(-1.5deg);
+  }
+  50% {
+    transform: rotate(1.5deg);
+  }
+}
+.jiggle {
+  animation: jiggle 0.22s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jiggle {
+    animation: none;
+  }
+}
