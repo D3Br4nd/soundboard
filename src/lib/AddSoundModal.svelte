@@ -10,20 +10,24 @@
    * @property {string} name
    * @property {string} icon
    * @property {string} color
+   * @property {string | null} [folderId]
    */
   /**
    * @typedef {Object} Props
    * @property {boolean} open
    * @property {EditingSound | null} [editing] suono da modificare; null/assente = creazione
-   * @property {(payload: { name: string, icon: string, color: string, file: File }) => void} onsave
-   * @property {(id: string, payload: { name: string, icon: string, color: string, file: File | null }) => void} [onupdate]
+   * @property {Array<{id: string, name: string}>} [folders]
+   * @property {string | null} [defaultFolderId] cartella preselezionata per un nuovo suono
+   * @property {(payload: { name: string, icon: string, color: string, folderId: string | null, file: File }) => void} onsave
+   * @property {(id: string, payload: { name: string, icon: string, color: string, folderId: string | null, file: File | null }) => void} [onupdate]
    */
   /** @type {Props} */
-  let { open = $bindable(false), editing = null, onsave, onupdate } = $props();
+  let { open = $bindable(false), editing = null, folders = [], defaultFolderId = null, onsave, onupdate } = $props();
 
   let name = $state('');
   let icon = $state(DEFAULT_ICON);
   let color = $state(BUTTON_COLORS[0]);
+  let folderId = $state('');
   /** @type {File | null} */
   let file = $state(null);
   let error = $state('');
@@ -39,10 +43,12 @@
       name = editing.name;
       icon = editing.icon;
       color = editing.color;
+      folderId = editing.folderId ?? '';
     } else {
       name = '';
       icon = DEFAULT_ICON;
       color = BUTTON_COLORS[0];
+      folderId = defaultFolderId ?? '';
     }
     file = null;
     error = '';
@@ -64,6 +70,7 @@
     name = '';
     icon = DEFAULT_ICON;
     color = BUTTON_COLORS[0];
+    folderId = '';
     file = null;
     error = '';
     pickerOpen = false;
@@ -100,9 +107,9 @@
       return;
     }
     if (editing) {
-      onupdate?.(editing.id, { name: name.trim(), icon, color, file });
+      onupdate?.(editing.id, { name: name.trim(), icon, color, folderId: folderId || null, file });
     } else {
-      onsave?.({ name: name.trim(), icon, color, file });
+      onsave?.({ name: name.trim(), icon, color, folderId: folderId || null, file });
     }
     resetForm();
     open = false;
@@ -202,6 +209,20 @@
             {/each}
           </div>
         </div>
+
+        <label class="flex flex-col gap-1.5">
+          <span class="text-sm font-medium text-slate-300">Cartella</span>
+          <select
+            bind:value={folderId}
+            class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white
+              focus:border-sky-500 focus:outline-none"
+          >
+            <option value="">Nessuna cartella</option>
+            {#each folders as folder (folder.id)}
+              <option value={folder.id}>{folder.name}</option>
+            {/each}
+          </select>
+        </label>
 
         <div class="flex items-center gap-3 rounded-xl bg-slate-800/60 p-3">
           <span class="text-xs text-slate-400">Anteprima</span>

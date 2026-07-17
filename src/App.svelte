@@ -1,26 +1,57 @@
 <script>
   import { onMount } from 'svelte';
-  import { Plus, X } from '@lucide/svelte';
+  import { Plus, X, ChevronDown, ChevronRight, FolderPlus, Pencil, Trash2 } from '@lucide/svelte';
   import { useRegisterSW } from 'virtual:pwa-register/svelte';
   import SoundButton from './lib/SoundButton.svelte';
   import AddSoundModal from './lib/AddSoundModal.svelte';
+  import FolderModal from './lib/FolderModal.svelte';
   import BottomNav from './lib/BottomNav.svelte';
   import SettingsView from './lib/SettingsView.svelte';
-  import { listSounds, createSound, updateSound, deleteSound, deleteAllSounds, audioUrl } from './lib/api.js';
+  import {
+    listSounds,
+    createSound,
+    updateSound,
+    deleteSound,
+    deleteAllSounds,
+    audioUrl,
+    listFolders,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+  } from './lib/api.js';
   import { toggleSound, preloadSound, releaseSound, setGlobalVolume } from './lib/player.js';
   import { getStoredVolume, setStoredVolume } from './lib/preferences.js';
 
   // I suoni vivono sul backend condiviso (vedi api/), cosi' sono gli stessi su
   // ogni dispositivo. L'elenco si ri-sincronizza ad ogni apertura/riapertura dell'app.
-  /** @type {Array<{id: string, name: string, icon: string, color: string, format: string, size?: number}>} */
+  /** @type {Array<{id: string, name: string, icon: string, color: string, format: string, size?: number, folderId?: string | null}>} */
   let sounds = $state([]);
+  /** @type {Array<{id: string, name: string}>} */
+  let folders = $state([]);
   let modalOpen = $state(false);
-  /** @type {{id: string, name: string, icon: string, color: string} | null} */
+  /** @type {{id: string, name: string, icon: string, color: string, folderId?: string | null} | null} */
   let editingSound = $state(null);
+  /** @type {string | null} */
+  let addModalFolderId = $state(null);
+  let folderModalOpen = $state(false);
+  /** @type {{id: string, name: string} | null} */
+  let editingFolder = $state(null);
+  /** @type {Set<string>} */
+  let collapsedFolders = $state(new Set());
   let ready = $state(false);
   let loadError = $state(false);
   let view = $state('home');
   let volume = $state(1);
+
+  const unfiledSounds = $derived(sounds.filter((s) => !s.folderId));
+  const soundsByFolder = $derived.by(() => {
+    const map = new Map();
+    for (const folder of folders) map.set(folder.id, []);
+    for (const sound of sounds) {
+      if (sound.folderId && map.has(sound.folderId)) map.get(sound.folderId).push(sound);
+    }
+    return map;
+  });
 
   /** @type {any} */
   let deferredInstallPrompt = $state(null);
@@ -36,8 +67,9 @@
 
   async function refreshSounds() {
     try {
-      const list = await listSounds();
+      const [list, folderList] = await Promise.all([listSounds(), listFolders()]);
       sounds = list;
+      folders = folderList;
       for (const sound of sounds) {
         preloadSound(sound.id, audioUrl(sound), sound.format);
       }
@@ -74,24 +106,31 @@
     toggleSound(sound.id, audioUrl(sound), sound.format);
   }
 
-  function openAddModal() {
+  function openAddModal(folderId = null) {
     editingSound = null;
+    addModalFolderId = folderId;
     modalOpen = true;
   }
 
   function openEditModal(sound) {
-    editingSound = { id: sound.id, name: sound.name, icon: sound.icon, color: sound.color };
+    editingSound = {
+      id: sound.id,
+      name: sound.name,
+      icon: sound.icon,
+      color: sound.color,
+      folderId: sound.folderId ?? null,
+    };
     modalOpen = true;
   }
 
-  async function handleSave({ name, icon, color, file }) {
-    const sound = await createSound({ name, icon, color, file });
+  async function handleSave({ name, icon, color, folderId, file }) {
+    const sound = await createSound({ name, icon, color, folderId, file });
     preloadSound(sound.id, audioUrl(sound), sound.format);
     sounds = [...sounds, sound];
   }
 
-  async function handleUpdate(id, { name, icon, color, file }) {
-    const sound = await updateSound(id, { name, icon, color, file });
+  async function handleUpdate(id, { name, icon, color, folderId, file }) {
+    const sound = await updateSound(id, { name, icon, color, folderId, file });
     if (file) {
       // Il file (e potenzialmente il formato/estensione nell'URL) e' cambiato:
       // il Howl precedente non e' piu' valido, va ricreato.
@@ -99,6 +138,39 @@
       preloadSound(sound.id, audioUrl(sound), sound.format);
     }
     sounds = sounds.map((s) => (s.id === id ? sound : s));
+  }
+
+  function toggleFolderCollapsed(id) {
+    const next = new Set(collapsedFolders);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    collapsedFolders = next;
+  }
+
+  function openNewFolderModal() {
+    editingFolder = null;
+    folderModalOpen = true;
+  }
+
+  function openEditFolderModal(folder) {
+    editingFolder = { id: folder.id, name: folder.name };
+    folderModalOpen = true;
+  }
+
+  async function handleSaveFolder(name) {
+    const folder = await createFolder(name);
+    folders = [...folders, folder];
+  }
+
+  async function handleUpdateFolder(id, name) {
+    const folder = await renameFolder(id, name);
+    folders = folders.map((f) => (f.id === id ? folder : f));
+  }
+
+  async function handleDeleteFolder(id) {
+    await deleteFolder(id);
+    folders = folders.filter((f) => f.id !== id);
+    sounds = sounds.map((s) => (s.folderId === id ? { ...s, folderId: null } : s));
   }
 
   async function handleRemove(sound) {
@@ -147,26 +219,102 @@
           Impossibile caricare i suoni. Verifica la connessione e riprova.
         </p>
       {:else}
-        <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
-          {#each sounds as sound (sound.id)}
-            <SoundButton
-              name={sound.name}
-              icon={sound.icon}
-              color={sound.color}
-              onplay={() => handlePlay(sound)}
-            />
+        <div class="flex flex-col gap-6">
+          <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
+            {#each unfiledSounds as sound (sound.id)}
+              <SoundButton
+                name={sound.name}
+                icon={sound.icon}
+                color={sound.color}
+                onplay={() => handlePlay(sound)}
+              />
+            {/each}
+
+            <button
+              type="button"
+              aria-label="Aggiungi suono"
+              class="flex aspect-square w-full flex-col items-center justify-center gap-1.5 rounded-2xl
+                border-2 border-dashed border-slate-700 text-slate-500 transition-colors
+                hover:border-slate-500 hover:text-slate-300 active:scale-95"
+              onclick={() => openAddModal(null)}
+            >
+              <Plus size={28} />
+              <span class="text-xs font-medium sm:text-sm">Aggiungi</span>
+            </button>
+          </div>
+
+          {#each folders as folder (folder.id)}
+            {@const folderSounds = soundsByFolder.get(folder.id) ?? []}
+            {@const isCollapsed = collapsedFolders.has(folder.id)}
+            <div class="flex flex-col gap-3 rounded-2xl bg-slate-900/60 p-3 ring-1 ring-slate-800">
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="flex flex-1 items-center gap-2 rounded-lg py-1 text-left text-sm font-semibold
+                    text-slate-200 hover:text-white"
+                  onclick={() => toggleFolderCollapsed(folder.id)}
+                >
+                  {#if isCollapsed}
+                    <ChevronRight size={18} class="shrink-0 text-slate-500" />
+                  {:else}
+                    <ChevronDown size={18} class="shrink-0 text-slate-500" />
+                  {/if}
+                  <span class="truncate">{folder.name}</span>
+                  <span class="text-xs font-normal text-slate-500">({folderSounds.length})</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Rinomina cartella {folder.name}"
+                  class="rounded-lg p-1.5 text-slate-500 hover:bg-sky-500/10 hover:text-sky-400"
+                  onclick={() => openEditFolderModal(folder)}
+                >
+                  <Pencil size={15} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Elimina cartella {folder.name}"
+                  class="rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
+                  onclick={() => handleDeleteFolder(folder.id)}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+
+              {#if !isCollapsed}
+                <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
+                  {#each folderSounds as sound (sound.id)}
+                    <SoundButton
+                      name={sound.name}
+                      icon={sound.icon}
+                      color={sound.color}
+                      onplay={() => handlePlay(sound)}
+                    />
+                  {/each}
+
+                  <button
+                    type="button"
+                    aria-label="Aggiungi suono in {folder.name}"
+                    class="flex aspect-square w-full flex-col items-center justify-center gap-1.5 rounded-2xl
+                      border-2 border-dashed border-slate-700 text-slate-500 transition-colors
+                      hover:border-slate-500 hover:text-slate-300 active:scale-95"
+                    onclick={() => openAddModal(folder.id)}
+                  >
+                    <Plus size={28} />
+                    <span class="text-xs font-medium sm:text-sm">Aggiungi</span>
+                  </button>
+                </div>
+              {/if}
+            </div>
           {/each}
 
           <button
             type="button"
-            aria-label="Aggiungi suono"
-            class="flex aspect-square w-full flex-col items-center justify-center gap-1.5 rounded-2xl
-              border-2 border-dashed border-slate-700 text-slate-500 transition-colors
-              hover:border-slate-500 hover:text-slate-300 active:scale-95"
-            onclick={openAddModal}
+            class="flex items-center justify-center gap-2 self-start rounded-xl border border-dashed
+              border-slate-700 px-4 py-2 text-sm font-medium text-slate-400 hover:border-slate-500 hover:text-slate-200"
+            onclick={openNewFolderModal}
           >
-            <Plus size={28} />
-            <span class="text-xs font-medium sm:text-sm">Aggiungi</span>
+            <FolderPlus size={16} />
+            Nuova cartella
           </button>
         </div>
       {/if}
@@ -220,8 +368,21 @@
 <BottomNav
   active={view}
   onhome={() => (view = 'home')}
-  onadd={openAddModal}
+  onadd={() => openAddModal(null)}
   onsettings={() => (view = 'settings')}
 />
 
-<AddSoundModal bind:open={modalOpen} editing={editingSound} onsave={handleSave} onupdate={handleUpdate} />
+<AddSoundModal
+  bind:open={modalOpen}
+  editing={editingSound}
+  {folders}
+  defaultFolderId={addModalFolderId}
+  onsave={handleSave}
+  onupdate={handleUpdate}
+/>
+<FolderModal
+  bind:open={folderModalOpen}
+  editing={editingFolder}
+  onsave={handleSaveFolder}
+  onupdate={handleUpdateFolder}
+/>

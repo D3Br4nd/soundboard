@@ -49,8 +49,9 @@ async function readDb() {
     const raw = await fs.readFile(DB_FILE, 'utf-8');
     dbCache = JSON.parse(raw);
   } catch {
-    dbCache = { sounds: [] };
+    dbCache = { sounds: [], folders: [] };
   }
+  if (!dbCache.folders) dbCache.folders = [];
   return dbCache;
 }
 
@@ -128,7 +129,7 @@ app.get('/api/sounds/:id/audio.:ext', async (req, res) => {
 });
 
 app.post('/api/sounds', upload.single('file'), async (req, res) => {
-  const { name, icon, color } = req.body;
+  const { name, icon, color, folderId } = req.body;
   if (!req.file || !name || !icon || !color) {
     return res.status(400).json({ error: 'name, icon, color e file sono obbligatori' });
   }
@@ -144,6 +145,7 @@ app.post('/api/sounds', upload.single('file'), async (req, res) => {
     name,
     icon,
     color,
+    folderId: folderId || null,
     filename,
     mimeType: req.file.mimetype,
     format,
@@ -160,6 +162,7 @@ app.put('/api/sounds/:id', upload.single('file'), async (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Suono non trovato' });
 
   const { name, icon, color } = req.body;
+  const folderId = 'folderId' in req.body ? req.body.folderId || null : existing.folderId ?? null;
   let filename = existing.filename;
   let mimeType = existing.mimeType;
   let format = existing.format;
@@ -183,6 +186,7 @@ app.put('/api/sounds/:id', upload.single('file'), async (req, res) => {
     name: name ?? existing.name,
     icon: icon ?? existing.icon,
     color: color ?? existing.color,
+    folderId,
     filename,
     mimeType,
     format,
@@ -213,6 +217,50 @@ app.delete('/api/sounds', async (req, res) => {
   }
   await mutateDb((db) => {
     db.sounds = [];
+  });
+  res.status(204).end();
+});
+
+app.get('/api/folders', async (req, res) => {
+  const db = await readDb();
+  res.json(db.folders);
+});
+
+app.post('/api/folders', async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'name e obbligatorio' });
+  }
+  const folder = { id: randomUUID(), name: name.trim(), createdAt: Date.now() };
+  await mutateDb((db) => db.folders.push(folder));
+  res.status(201).json(folder);
+});
+
+app.put('/api/folders/:id', async (req, res) => {
+  const db = await readDb();
+  const existing = db.folders.find((f) => f.id === req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Cartella non trovata' });
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'name e obbligatorio' });
+  }
+  const updated = { ...existing, name: name.trim() };
+  await mutateDb((db) => {
+    const idx = db.folders.findIndex((f) => f.id === existing.id);
+    db.folders[idx] = updated;
+  });
+  res.json(updated);
+});
+
+app.delete('/api/folders/:id', async (req, res) => {
+  const db = await readDb();
+  const existing = db.folders.find((f) => f.id === req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Cartella non trovata' });
+  await mutateDb((db) => {
+    db.folders = db.folders.filter((f) => f.id !== existing.id);
+    for (const sound of db.sounds) {
+      if (sound.folderId === existing.id) sound.folderId = null;
+    }
   });
   res.status(204).end();
 });
