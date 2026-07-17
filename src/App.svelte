@@ -7,7 +7,7 @@
   import BottomNav from './lib/BottomNav.svelte';
   import SettingsView from './lib/SettingsView.svelte';
   import { listSounds, createSound, updateSound, deleteSound, deleteAllSounds, audioUrl } from './lib/api.js';
-  import { playSound, preloadSound, releaseSound, setGlobalVolume } from './lib/player.js';
+  import { toggleSound, preloadSound, releaseSound, setGlobalVolume } from './lib/player.js';
   import { getStoredVolume, setStoredVolume } from './lib/preferences.js';
 
   // I suoni vivono sul backend condiviso (vedi api/), cosi' sono gli stessi su
@@ -71,7 +71,7 @@
   });
 
   function handlePlay(sound) {
-    playSound(sound.id, audioUrl(sound), sound.format);
+    toggleSound(sound.id, audioUrl(sound), sound.format);
   }
 
   function openAddModal() {

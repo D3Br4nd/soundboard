@@ -30,6 +30,7 @@
 
   const totalSize = $derived(sounds.reduce((sum, s) => sum + (s.size ?? 0), 0));
 
+  /** @param {number} bytes */
   function formatSize(bytes) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -88,6 +89,18 @@
         </button>
       {/if}
     </div>
+
+    <p class="text-xs text-slate-500">
+      Cerchi nuovi effetti sonori? Prova
+      <a
+        href="https://freesound.org"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-sky-400 underline hover:text-sky-300"
+      >
+        freesound.org
+      </a>
+    </p>
 
     {#if sounds.length === 0}
       <p class="text-sm text-slate-500">Nessun suono caricato.</p>

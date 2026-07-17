@@ -26,11 +26,14 @@ export function preloadSound(id, src, format) {
   getHowl(id, src, format);
 }
 
-/** Riproduce un suono dall'inizio, permettendo tap ripetuti sovrapposti. */
-export function playSound(id, src, format) {
+/** Riproduce/ferma un suono: se e' gia' in riproduzione lo stoppa, altrimenti lo fa partire dall'inizio. */
+export function toggleSound(id, src, format) {
   const howl = getHowl(id, src, format);
-  howl.stop();
-  howl.play();
+  if (howl.playing()) {
+    howl.stop();
+  } else {
+    howl.play();
+  }
 }
 
 /** Rimuove un Howl dalla cache (es. quando un suono custom viene eliminato o modificato). */
