@@ -1,43 +1,56 @@
-# Svelte + Vite
+# Soundboard
 
-This template should help get you started developing with Svelte in Vite.
+Soundboard web installabile (PWA), dark-mode, con suoni predefiniti e caricamento di suoni custom persistiti su IndexedDB.
 
-## Recommended IDE Setup
+- **Repo:** [github.com/D3Br4nd/soundboard](https://github.com/D3Br4nd/soundboard)
+- **Live:** [sb.debrandstudio.it](https://sb.debrandstudio.it) (dietro Nginx Proxy Manager)
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
-
-## Need an official Svelte framework?
-
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
-
-## Technical considerations
-
-**Why use this over SvelteKit?**
-
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
-
-This template contains as little as possible to get started with Vite + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
-
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
-
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `checkJs` in the JS template?**
-
-It is likely that most cases of changing variable types in runtime are likely to be accidental, rather than deliberate. This provides advanced typechecking out of the box. Should you like to take advantage of the dynamically-typed nature of JavaScript, it is trivial to change the configuration.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/sveltejs/svelte-hmr/tree/master/packages/svelte-hmr#preservation-of-local-state).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```js
-// store.js
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+```bash
+git clone https://github.com/D3Br4nd/soundboard.git
+cd soundboard
 ```
+
+## Stack
+
+- **Frontend:** Svelte 5 (runes) + Tailwind CSS 4 + bits-ui
+- **Audio:** howler.js
+- **Storage:** localforage (Blob su IndexedDB per i suoni custom)
+- **PWA:** vite-plugin-pwa
+- **Deploy:** Docker multi-stage (Node → Nginx), rete esterna `debrand_network`
+
+## Sviluppo
+
+```bash
+npm install
+npm run dev      # dev server con HMR
+npm run build    # build di produzione in dist/
+npm run preview  # anteprima della build
+```
+
+## Struttura
+
+```
+src/
+  lib/
+    sounds.js          suoni di default + palette colori/icone per il picker
+    storage.js          persistenza dei suoni custom (localforage/IndexedDB)
+    player.js            wrapper Howler con cache dei suoni per tap a bassa latenza
+    SoundButton.svelte   pulsante della griglia
+    AddSoundModal.svelte modale per aggiungere un suono custom (bits-ui Dialog)
+  App.svelte              griglia principale
+public/
+  sounds/                 suoni di default (.wav)
+  icons/                  icone PWA (192/512)
+```
+
+> I file in `public/sounds/*.wav` sono placeholder generati (toni sintetici), non registrazioni reali di applausi/risate/fischi/clacson. Sostituiscili con file audio veri mantenendo lo stesso nome file, oppure aggiorna i percorsi in `src/lib/sounds.js`. Lo stesso vale per `public/icons/icon-192.png` e `icon-512.png`, generati come placeholder: sostituiscili con l'icona reale dell'app.
+
+## Deploy con Docker
+
+```bash
+docker compose up -d --build
+```
+
+Il `docker-compose.yml` si aggancia alla rete esterna `debrand_network` (deve già esistere: `docker network create debrand_network` se manca) e non pubblica porte sull'host — l'esposizione avviene tramite Nginx Proxy Manager collegato alla stessa rete, puntato al container `soundboard` sulla porta 80, per il dominio `sb.debrandstudio.it`.
+
+Il `Dockerfile` è multi-stage: build con Node in uno stage temporaneo, il container finale contiene solo Nginx + gli asset statici in `dist/`. `nginx.conf` gestisce il fallback SPA su `index.html` e disabilita la cache solo per `/sw.js` (service worker), così gli aggiornamenti della PWA arrivano subito ai client.
