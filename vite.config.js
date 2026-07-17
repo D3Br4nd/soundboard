@@ -56,6 +56,12 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // Il file /sw.js non deve mai essere servito dalla cache: lo gestisce nginx.conf.
         navigateFallbackDenylist: [/^\/api/],
+        // Un nuovo service worker attiva subito (invece di restare "in attesa" finche'
+        // tutte le schede/l'app installata non vengono chiuse): dopo un deploy, la
+        // versione aggiornata viene servita al primo reload successivo, senza dover
+        // aspettare o intercettare il banner "Nuova versione disponibile".
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             // Elenco suoni dall'API: prova sempre la rete (dati aggiornati da altri
