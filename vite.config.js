@@ -2,16 +2,25 @@ import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'))
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [
     svelte(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
-      includeAssets: ['favicon.svg', 'icons/*.png', 'sounds/*.wav', 'emoji-data.json'],
+      // Registrazione manuale via virtual:pwa-register/svelte in App.svelte,
+      // cosi' possiamo agganciare il controllo periodico degli aggiornamenti.
+      injectRegister: false,
+      includeAssets: ['favicon.svg', 'icons/*.png', 'emoji-data.json'],
       manifest: {
         name: 'Soundboard',
         short_name: 'Soundboard',
@@ -42,22 +51,31 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,wav,mp3,json}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,json}'],
         // emoji-data.json (~430kB) e' voluminoso: alziamo il limite di precache di workbox.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // Il file /sw.js non deve mai essere servito dalla cache: lo gestisce nginx.conf.
-        // Qui evitiamo che i suoni custom (Blob su IndexedDB) finiscano nella cache del SW.
         navigateFallbackDenylist: [/^\/api/],
         runtimeCaching: [
           {
-            urlPattern: /\/sounds\/.*\.(wav|mp3)$/,
-            handler: 'CacheFirst',
+            // Elenco suoni dall'API: prova sempre la rete (dati aggiornati da altri
+            // dispositivi), ma cade sulla cache se offline o la rete e' lenta.
+            urlPattern: /\/api\/sounds$/,
+            handler: 'NetworkFirst',
             options: {
-              cacheName: 'default-sounds-cache',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 365,
-              },
+              cacheName: 'sounds-list-cache',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          {
+            // File audio: serviti subito dalla cache (bassa latenza al tap) mentre
+            // una versione aggiornata viene scaricata in background per il prossimo utilizzo.
+            urlPattern: /\/api\/sounds\/.+\/audio\..+$/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'sounds-audio-cache',
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 365 },
             },
           },
         ],

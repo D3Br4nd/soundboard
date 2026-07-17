@@ -5,11 +5,30 @@ services:
       dockerfile: Dockerfile
     container_name: soundboard
     restart: unless-stopped
+    depends_on:
+      - api
     networks:
       - debrand_network
     # Nessuna porta pubblicata: l'esposizione avviene tramite Nginx Proxy Manager
     # sulla rete condivisa, che fa da reverse proxy verso questo container sulla porta 80.
+    # nginx.conf inoltra internamente /api/ al container "api" qui sotto.
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: soundboard-api
+    restart: unless-stopped
+    volumes:
+      - soundboard_data:/data
+    networks:
+      - debrand_network
+    # Nessuna porta pubblicata: raggiungibile solo dal container "soundboard" (nginx)
+    # via rete interna, che fa da reverse proxy su /api/.
 
 networks:
   debrand_network:
     external: true
+
+volumes:
+  soundboard_data:
