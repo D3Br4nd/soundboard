@@ -11,7 +11,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['favicon.svg', 'icons/*.png', 'sounds/*.wav'],
+      includeAssets: ['favicon.svg', 'icons/*.png', 'sounds/*.wav', 'emoji-data.json'],
       manifest: {
         name: 'Soundboard',
         short_name: 'Soundboard',
@@ -42,7 +42,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,wav,mp3}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,wav,mp3,json}'],
+        // emoji-data.json (~430kB) e' voluminoso: alziamo il limite di precache di workbox.
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // Il file /sw.js non deve mai essere servito dalla cache: lo gestisce nginx.conf.
         // Qui evitiamo che i suoni custom (Blob su IndexedDB) finiscano nella cache del SW.
         navigateFallbackDenylist: [/^\/api/],

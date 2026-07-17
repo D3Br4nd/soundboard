@@ -22,8 +22,5 @@ export const BUTTON_COLORS = [
   'bg-pink-500',
 ];
 
-/** Emoji suggerite per la scelta rapida dell'icona. */
-export const SUGGESTED_ICONS = [
-  '🔊', '🎵', '🎶', '📯', '👏', '😂', '😱', '🚨',
-  '🔥', '💥', '🐶', '🐱', '🚀', '⚡', '🎉', '💩',
-];
+/** Icona di default per un nuovo suono custom, prima che l'utente ne scelga una dal picker. */
+export const DEFAULT_ICON = '🔊';

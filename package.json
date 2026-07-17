@@ -19,6 +19,7 @@
   "dependencies": {
     "@lucide/svelte": "^1.25.0",
     "bits-ui": "^2.18.1",
+    "emoji-picker-element": "^1.29.1",
     "howler": "^2.2.4",
     "localforage": "^1.10.0"
   }

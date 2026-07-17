@@ -15,6 +15,7 @@ cd soundboard
 - **Frontend:** Svelte 5 (runes) + Tailwind CSS 4 + bits-ui
 - **Audio:** howler.js
 - **Storage:** localforage (Blob su IndexedDB per i suoni custom)
+- **Icone:** emoji-picker-element (intero set di emoji Unicode, dati offline)
 - **PWA:** vite-plugin-pwa
 - **Deploy:** Docker multi-stage (Node → Nginx), rete esterna `debrand_network`
 
@@ -41,9 +42,12 @@ src/
 public/
   sounds/                 suoni di default (.wav)
   icons/                  icone PWA (192/512)
+  emoji-data.json          dataset emoji per il picker (offline, precaricato dal service worker)
 ```
 
 > I file in `public/sounds/*.wav` sono placeholder generati (toni sintetici), non registrazioni reali di applausi/risate/fischi/clacson. Sostituiscili con file audio veri mantenendo lo stesso nome file, oppure aggiorna i percorsi in `src/lib/sounds.js`. Lo stesso vale per `public/icons/icon-192.png` e `icon-512.png`, generati come placeholder: sostituiscili con l'icona reale dell'app.
+>
+> Fonti consigliate per suoni royalty-free: [freesound.org](https://freesound.org), [mixkit.co/free-sound-effects](https://mixkit.co/free-sound-effects), [pixabay.com/sound-effects](https://pixabay.com/sound-effects).
 
 ## Deploy con Docker
 

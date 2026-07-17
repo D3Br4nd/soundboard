@@ -1,7 +1,8 @@
 <script>
+  import 'emoji-picker-element';
   import { Dialog } from 'bits-ui';
-  import { X, Upload } from '@lucide/svelte';
-  import { BUTTON_COLORS, SUGGESTED_ICONS } from './sounds.js';
+  import { X, Upload, SmilePlus } from '@lucide/svelte';
+  import { BUTTON_COLORS, DEFAULT_ICON } from './sounds.js';
 
   /**
    * @typedef {Object} Props
@@ -12,20 +13,35 @@
   let { open = $bindable(false), onsave } = $props();
 
   let name = $state('');
-  let icon = $state(SUGGESTED_ICONS[0]);
+  let icon = $state(DEFAULT_ICON);
   let color = $state(BUTTON_COLORS[0]);
   /** @type {File | null} */
   let file = $state(null);
   let error = $state('');
+  let pickerOpen = $state(false);
+  /** @type {any} */
+  let pickerEl = $state();
 
   const ACCEPTED_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav'];
 
+  $effect(() => {
+    const el = pickerEl;
+    if (!el) return;
+    const handleEmojiClick = (e) => {
+      icon = e.detail.unicode;
+      pickerOpen = false;
+    };
+    el.addEventListener('emoji-click', handleEmojiClick);
+    return () => el.removeEventListener('emoji-click', handleEmojiClick);
+  });
+
   function resetForm() {
     name = '';
-    icon = SUGGESTED_ICONS[0];
+    icon = DEFAULT_ICON;
     color = BUTTON_COLORS[0];
     file = null;
     error = '';
+    pickerOpen = false;
   }
 
   function handleFileChange(e) {
@@ -74,8 +90,8 @@
   <Dialog.Portal>
     <Dialog.Overlay class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
     <Dialog.Content
-      class="fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2
-        rounded-2xl bg-slate-900 p-5 text-slate-100 shadow-2xl ring-1 ring-slate-700"
+      class="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2
+        overflow-y-auto rounded-2xl bg-slate-900 p-5 text-slate-100 shadow-2xl ring-1 ring-slate-700"
     >
       <div class="mb-4 flex items-center justify-between">
         <Dialog.Title class="text-lg font-semibold">Nuovo suono</Dialog.Title>
@@ -119,18 +135,27 @@
 
         <div class="flex flex-col gap-1.5">
           <span class="text-sm font-medium text-slate-300">Icona</span>
-          <div class="grid grid-cols-8 gap-1.5">
-            {#each SUGGESTED_ICONS as suggestion (suggestion)}
-              <button
-                type="button"
-                class="flex aspect-square items-center justify-center rounded-lg text-lg
-                  ring-1 ring-slate-700 hover:bg-slate-800 {icon === suggestion ? 'bg-sky-600/40 ring-sky-500' : ''}"
-                onclick={() => (icon = suggestion)}
-              >
-                {suggestion}
-              </button>
-            {/each}
-          </div>
+          <button
+            type="button"
+            class="flex items-center gap-2 self-start rounded-xl border border-slate-700 bg-slate-800
+              px-3 py-2 text-sm text-slate-200 hover:border-slate-500"
+            onclick={() => (pickerOpen = !pickerOpen)}
+          >
+            <span class="text-xl leading-none">{icon}</span>
+            <SmilePlus size={16} class="text-slate-400" />
+            <span>{pickerOpen ? 'Chiudi' : 'Scegli emoji'}</span>
+          </button>
+
+          {#if pickerOpen}
+            <div class="overflow-hidden rounded-xl border border-slate-700">
+              <emoji-picker
+                bind:this={pickerEl}
+                class="dark"
+                data-source="/emoji-data.json"
+                style="width: 100%; height: 320px;"
+              ></emoji-picker>
+            </div>
+          {/if}
         </div>
 
         <div class="flex flex-col gap-1.5">
