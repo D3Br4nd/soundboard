@@ -1,0 +1,15 @@
+services:
+  soundboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soundboard
+    restart: unless-stopped
+    networks:
+      - debrand_network
+    # Nessuna porta pubblicata: l'esposizione avviene tramite Nginx Proxy Manager
+    # sulla rete condivisa, che fa da reverse proxy verso questo container sulla porta 80.
+
+networks:
+  debrand_network:
+    external: true
